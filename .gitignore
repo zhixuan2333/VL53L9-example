@@ -10,3 +10,7 @@
 # OS / editor
 .DS_Store
 *~
+
+# Generated from the .sc design (re-export from SolidCraft)
+*.stl
+CAD/**/*.png
