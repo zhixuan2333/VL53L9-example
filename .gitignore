@@ -1,0 +1,12 @@
+# SolidCraft backups and lock files
+*.bak
+.~*.lock
+
+# Slicer output (Bambu Studio)
+*.gcode
+*.gcode.3mf
+*.3mf.bak
+
+# OS / editor
+.DS_Store
+*~
