@@ -14,3 +14,13 @@
 # Generated from the .sc design (re-export from SolidCraft)
 *.stl
 CAD/**/*.png
+
+# Firmware build output
+build/
+
+# SLA0111-licensed parts of ST's STSW-IMG054 package: not redistributable.
+# Fetch from st.com, then run scripts/import-st-package.sh (see vendor/README.md).
+vendor/vl53l9-nucleo-n657-fmw-1.1.1/app/*
+vendor/vl53l9-nucleo-n657-fmw-1.1.1/lib/*
+!vendor/vl53l9-nucleo-n657-fmw-1.1.1/app/PLACEHOLDER.md
+!vendor/vl53l9-nucleo-n657-fmw-1.1.1/lib/PLACEHOLDER.md
