@@ -1,0 +1,879 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VL53L9 Explorer</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2a2f3a;
+    --fg: #e6e8ee; --dim: #8b93a5; --accent: #4fb3ff; --ok: #3ecf8e; --warn: #f5a524; --err: #ff5c6c;
+    --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font: 13px/1.4 system-ui, -apple-system, "Noto Sans JP", sans-serif; }
+  button, select, input { font: inherit; color: inherit; }
+  button { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #04121f; border-color: var(--accent); font-weight: 600; }
+  select, input[type=number], input[type=text] { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; }
+  input[type=number] { width: 84px; font-family: var(--mono); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  input[type=checkbox] { accent-color: var(--accent); }
+
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100%; }
+  header { display: flex; gap: 12px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; letter-spacing: .02em; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); display: inline-block; margin-right: 6px; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .stat { font-family: var(--mono); color: var(--dim); }
+  .stat b { color: var(--fg); font-weight: 600; }
+  .spacer { flex: 1; }
+
+  main { display: grid; grid-template-columns: 330px 1fr; min-height: 0; }
+  aside { border-right: 1px solid var(--line); overflow-y: auto; background: var(--panel); }
+  section { padding: 10px 14px 12px; border-bottom: 1px solid var(--line); }
+  section h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 8px; display: flex; justify-content: space-between; align-items: center; }
+  .row { display: grid; grid-template-columns: 118px 1fr; gap: 6px; align-items: center; margin: 5px 0; }
+  .row label { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row > select { min-width: 0; width: 100%; }
+  .row .pair { display: flex; gap: 6px; align-items: center; }
+  .row .pair input[type=range] { flex: 1; }
+  .hint { color: var(--dim); font-size: 11px; margin: 4px 0 0; }
+  .ctrl .row label { font-family: var(--mono); font-size: 11.5px; }
+  .changed label { color: var(--warn) !important; }
+  .pbtns { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 8px; }
+  .row .pair input[type=text] { flex: 1; min-width: 0; }
+  .streams { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+
+  .view { overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .tabs button.active { border-color: var(--accent); color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  .card .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .card .head b { font-family: var(--mono); }
+  .card .range { font-family: var(--mono); color: var(--dim); font-size: 11px; }
+  .card canvas { width: 100%; image-rendering: pixelated; background: #000; border-radius: 4px; display: block; cursor: crosshair; }
+  .card .bar { height: 8px; border-radius: 3px; margin-top: 6px; }
+  .card .head select { font-size: 11px; padding: 1px 4px; }
+  pre.ascii { margin: 0; font: 12px/1.0 var(--mono); letter-spacing: .25em; color: var(--fg); background: #000; padding: 10px; border-radius: 6px; overflow: auto; }
+  .readout { font-family: var(--mono); color: var(--dim); min-height: 1.4em; }
+  .readout b { color: var(--fg); }
+
+  footer { border-top: 1px solid var(--line); background: var(--panel); display: grid; grid-template-rows: 1fr auto; height: 180px; }
+  #log { overflow-y: auto; font: 11.5px/1.35 var(--mono); padding: 6px 14px; white-space: pre-wrap; color: var(--dim); }
+  #log .tx { color: var(--accent); }
+  #log .err { color: var(--err); }
+  #log .json { color: #b9c3d6; }
+  .cmd { display: flex; gap: 8px; padding: 6px 14px; border-top: 1px solid var(--line); }
+  .cmd input { flex: 1; font-family: var(--mono); }
+  .banner { padding: 18px; border: 1px dashed var(--line); border-radius: 8px; color: var(--dim); }
+  .banner code { font-family: var(--mono); color: var(--fg); }
+
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 45vh; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>VL53L9 Explorer</h1>
+    <span><span id="dot" class="dot"></span><span id="conn">未接続</span></span>
+    <select id="baud" title="UART baud rate (921600 以外は実験的)">
+      <option value="921600">921600</option>
+      <option value="2000000">2 M (実験的)</option>
+      <option value="4000000">4 M (実験的)</option>
+      <option value="8000000">8 M (実験的)</option>
+    </select>
+    <button id="connect" class="primary">接続</button>
+    <span class="spacer"></span>
+    <span class="stat">frame <b id="s-frame">–</b></span>
+    <span class="stat">fps <b id="s-fps">–</b></span>
+    <span class="stat">drop <b id="s-drop">0</b></span>
+    <span class="stat">temp <b id="s-temp">–</b></span>
+    <span class="stat">res <b id="s-res">–</b></span>
+  </header>
+
+  <main>
+    <aside>
+      <section>
+        <h2>Profile</h2>
+        <div class="row"><label>profile</label><select id="profile"></select></div>
+        <div class="pbtns">
+          <button id="p-apply" class="primary">適用</button>
+          <button id="p-delete">削除</button>
+          <button id="p-export">書き出し</button>
+          <button id="p-import">読み込み</button>
+          <input id="p-file" type="file" accept=".json,application/json" hidden>
+        </div>
+        <div class="row"><label>現在の設定を保存</label>
+          <div class="pair"><input id="p-name" type="text" placeholder="名前"><button id="p-save">保存</button></div>
+        </div>
+        <p class="hint" id="p-hint">ST: … は ST のプロファイル（sync は autonomous）。保存したものはこのブラウザに残る。</p>
+      </section>
+
+      <section id="sensor">
+        <h2>Sensor <label style="text-transform:none;letter-spacing:0"><input type="checkbox" id="auto" checked> 自動適用</label></h2>
+      </section>
+
+      <section>
+        <h2>Streams</h2>
+        <div class="streams" id="streams"></div>
+        <p class="hint" id="bw"></p>
+      </section>
+
+      <section class="ctrl">
+        <h2>Processing (ST transform) <button id="ctrl-reset" title="ファームの既定値に戻す">既定値</button></h2>
+        <div id="ctrls"><p class="hint">接続するとファームから一覧を取得する。</p></div>
+      </section>
+
+      <section>
+        <button id="apply" class="primary" style="width:100%">適用</button>
+        <p class="hint" id="pending-hint"></p>
+      </section>
+    </aside>
+
+    <div class="view">
+      <div class="toolbar">
+        <span class="tabs"><button data-view="image" class="active">Image</button> <button data-view="ascii">ASCII</button></span>
+        <label><input type="checkbox" id="pause"> 一時停止</label>
+        <span class="spacer"></span>
+        <span class="readout" id="readout"></span>
+      </div>
+      <div id="banner" class="banner">
+        Chrome / Chromium で開き「接続」を押して ST-LINK の VCP (<code>/dev/ttyACM*</code>) を選ぶ。
+        ファームは <code>make APP=explorer run-probe-rs</code> で書き込む。picocom などがポートを開いていると接続できない。
+      </div>
+      <div class="grid" id="cards"></div>
+      <pre class="ascii" id="ascii" hidden></pre>
+    </div>
+  </main>
+
+  <footer>
+    <div id="log"></div>
+    <form class="cmd" id="cmd-form">
+      <input id="cmd" type="text" placeholder="コマンド (get / status / set binning=4 exposure=8 / out ascii ...)" autocomplete="off">
+      <button>送信</button>
+    </form>
+  </footer>
+</div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+
+/* ------------------------------------------------------------ sensor UI */
+
+const BINNINGS = { 2: '54×42', 4: '24×20', 6: '18×14', 8: '12×10', 12: '8×6', 24: '4×4' };
+const SENSOR_FIELDS = [
+  { key: 'sync', label: 'sync', kind: 'select', options: [[1, 'manual (trigger)'], [2, 'autonomous'], [0, 'slave (SYNC_IN)']] },
+  { key: 'binning', label: 'binning', kind: 'select', options: Object.entries(BINNINGS).map(([b, r]) => [+b, `${b} → ${r}`]) },
+  { key: 'exposure', label: 'exposure [ms]', kind: 'range', min: 1, max: 30, step: 1 },
+  { key: 'fps', label: 'frame rate [fps]', kind: 'range', min: 1, max: 100, step: 1,
+    toFw: (v) => ['period_us', Math.round(1e6 / v)], fromFw: (s) => Math.round(1e6 / s.period_us) },
+  { key: 'context', label: 'context', kind: 'select', options: [[0, 'short'], [1, 'long']] },
+  { key: 'dss', label: 'DSS', kind: 'select', options: [[0, 'disable'], [1, 'long'], [2, 'short']] },
+  { key: 'dss_index', label: 'DSS index', kind: 'range', min: 0, max: 9, step: 1 },
+  { key: 'power', label: 'power', kind: 'select', options: [[0, 'regular'], [1, 'low'], [2, 'ultra low']] },
+];
+const STREAM_DEFS = {
+  depth: { cmap: 'turbo', unit: 'mm' }, amplitude: { cmap: 'gray' }, ambient: { cmap: 'gray' },
+  confidence: { cmap: 'viridis' }, reflectance: { cmap: 'gray' }, status: { cmap: 'viridis' },
+};
+
+let fw = null;           // last state from firmware
+const pending = {};      // key -> value string, sent with next "set"
+let applyTimer = null;
+
+function makeRow(label, input, extra) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const l = document.createElement('label');
+  l.textContent = label;
+  row.append(l);
+  if (extra) {
+    const pair = document.createElement('div');
+    pair.className = 'pair';
+    pair.append(input, extra);
+    row.append(pair);
+  } else {
+    row.append(input);
+  }
+  return row;
+}
+
+function makeInput(def, onChange) {
+  if (def.kind === 'select' || def.kind === 'bool') {
+    const sel = document.createElement('select');
+    const opts = def.kind === 'bool' ? [[1, 'on'], [0, 'off']] : def.options;
+    for (const [v, t] of opts) sel.add(new Option(t, v));
+    sel.onchange = () => onChange(sel.value);
+    return { el: sel, set: (v) => { sel.value = String(+v); } };
+  }
+  const num = document.createElement('input');
+  num.type = 'number';
+  if (def.step !== undefined) num.step = def.step;
+  if (def.min !== undefined) num.min = def.min;
+  if (def.max !== undefined) num.max = def.max;
+  num.onchange = () => onChange(num.value);
+  if (def.min === undefined || def.max === undefined) {
+    return { el: num, set: (v) => { num.value = v; } };
+  }
+  const rng = document.createElement('input');
+  rng.type = 'range';
+  rng.min = def.min; rng.max = def.max; rng.step = def.step ?? 'any';
+  rng.oninput = () => { num.value = rng.value; };
+  rng.onchange = () => onChange(rng.value);
+  num.addEventListener('change', () => { rng.value = num.value; });
+  return { el: rng, extra: num, set: (v) => { rng.value = v; num.value = v; } };
+}
+
+const sensorInputs = {};
+for (const def of SENSOR_FIELDS) {
+  const inp = makeInput(def, (v) => {
+    if (def.toFw) { const [k, fv] = def.toFw(+v); queue(k, fv, def.key); } else queue(def.key, v, def.key);
+  });
+  const row = makeRow(def.label, inp.el, inp.extra);
+  row.dataset.key = def.key;
+  $('sensor').append(row);
+  sensorInputs[def.key] = inp;
+}
+$('sensor').insertAdjacentHTML('beforeend', '<p class="hint">frame rate は autonomous のときだけ有効（10 ms〜1 s）。slave は外部 SYNC_IN が必要。DSS index 7〜9 は DSS disable 用。</p>');
+
+function queue(key, value, rowKey = key) {
+  pending[key] = String(value);
+  document.querySelector(`[data-key="${CSS.escape(rowKey)}"]`)?.classList.add('changed');
+  $('pending-hint').textContent = `未適用: ${Object.keys(pending).join(', ')}`;
+  if ($('auto').checked) {
+    clearTimeout(applyTimer);
+    applyTimer = setTimeout(apply, 300);
+  }
+}
+
+function apply() {
+  clearTimeout(applyTimer);
+  const parts = Object.entries(pending).map(([k, v]) => `${k}=${v}`);
+  if (!parts.length) return;
+  for (const k of Object.keys(pending)) delete pending[k];
+  send(`set ${parts.join(' ')}`);
+  $('pending-hint').textContent = '';
+}
+
+$('apply').onclick = apply;
+
+/* profiles: ST usecases built into the firmware + user profiles in localStorage */
+
+const ST_PROFILES = ['AR_RANGE (bin2, long)', 'AR_PRECISION (bin2, short)', 'AF_RANGE (bin4, long)', 'AF (bin4, short)'];
+const PROFILE_KEY = 'vl53l9-explorer.profiles';
+const SENSOR_KEYS = ['sync', 'power', 'context', 'period_us', 'binning', 'exposure', 'dss', 'dss_index'];
+
+function loadProfiles() {
+  try { return JSON.parse(localStorage.getItem(PROFILE_KEY)) ?? {}; } catch { return {}; }
+}
+function storeProfiles(p) {
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch { log('localStorage に保存できない（書き出しを使う）', 'err'); }
+}
+let profiles = loadProfiles();
+
+function listProfiles(select) {
+  const sel = $('profile');
+  sel.innerHTML = '';
+  const st = document.createElement('optgroup');
+  st.label = 'ST';
+  ST_PROFILES.forEach((n, i) => st.append(new Option(`ST: ${n}`, `st:${i}`)));
+  sel.append(st);
+  const names = Object.keys(profiles).sort();
+  if (names.length) {
+    const mine = document.createElement('optgroup');
+    mine.label = '保存済み';
+    for (const n of names) mine.append(new Option(n, `user:${n}`));
+    sel.append(mine);
+  }
+  if (select) sel.value = select;
+}
+
+/* the applied firmware state, with not-yet-applied edits on top */
+function currentProfile() {
+  const sensor = Object.fromEntries(SENSOR_KEYS.map((k) => [k, +(pending[k] ?? fw.sensor[k])]));
+  const ctrls = Object.fromEntries(fw.ctrls.map((c) => {
+    const v = pending[c.n] ?? (c.ty === 'bool' ? (c.v ? 1 : 0) : c.v);
+    return [c.n, c.ty === 'bool' ? +v === 1 : +v];
+  }));
+  return { sensor, streams: +(pending.streams ?? fw.streams), ctrls };
+}
+
+function profileCommand(p) {
+  // numbers only: an imported file must not be able to smuggle spaces or newlines into the command line
+  const num = (v) => (Number.isFinite(+v) ? +v : 0);
+  const parts = SENSOR_KEYS.filter((k) => k in (p.sensor ?? {})).map((k) => `${k}=${num(p.sensor[k])}`);
+  if (p.streams !== undefined) parts.push(`streams=${num(p.streams)}`);
+  const known = new Set(fw.ctrls.map((c) => c.n));
+  const skipped = [];
+  for (const [n, v] of Object.entries(p.ctrls ?? {})) {
+    if (known.has(n)) parts.push(`${n}=${num(v)}`);
+    else skipped.push(n);
+  }
+  if (skipped.length) log(`このファームに無いコントロールを無視: ${skipped.join(', ')}`, 'err');
+  return `set ${parts.join(' ')}`;
+}
+
+$('p-apply').onclick = () => {
+  if (!fw) { log('未接続', 'err'); return; }
+  for (const k of Object.keys(pending)) delete pending[k];
+  const v = $('profile').value;
+  if (v.startsWith('st:')) send(`set usecase=${v.slice(3)}`);
+  else send(profileCommand(profiles[v.slice(5)]));
+};
+
+$('p-save').onclick = () => {
+  const name = $('p-name').value.trim();
+  if (!name) { $('p-name').focus(); return; }
+  if (!fw) { log('未接続（ファームの状態が無いと保存できない）', 'err'); return; }
+  if (profiles[name] && !confirm(`「${name}」を上書きする？`)) return;
+  profiles[name] = currentProfile();
+  storeProfiles(profiles);
+  listProfiles(`user:${name}`);
+  $('p-name').value = '';
+  log(`profile 保存: ${name}`);
+};
+
+$('p-delete').onclick = () => {
+  const v = $('profile').value;
+  if (!v.startsWith('user:')) { log('ST のプロファイルは削除できない', 'err'); return; }
+  const name = v.slice(5);
+  if (!confirm(`「${name}」を削除する？`)) return;
+  delete profiles[name];
+  storeProfiles(profiles);
+  listProfiles();
+};
+
+$('p-export').onclick = () => {
+  const blob = new Blob([JSON.stringify({ format: 'vl53l9-explorer-profiles', version: 1, profiles }, null, 2)],
+    { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'vl53l9-profiles.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+$('p-import').onclick = () => $('p-file').click();
+$('p-file').onchange = async () => {
+  const file = $('p-file').files[0];
+  $('p-file').value = '';
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    const incoming = data.profiles ?? {};
+    const ok = Object.entries(incoming).filter(([, p]) => p && typeof p === 'object' && p.sensor);
+    for (const [n, p] of ok) profiles[n] = { sensor: p.sensor, streams: p.streams, ctrls: p.ctrls ?? {} };
+    storeProfiles(profiles);
+    listProfiles();
+    log(`profile 読み込み: ${ok.map(([n]) => n).join(', ') || '（なし）'}`);
+  } catch (e) {
+    log(`読み込み失敗: ${e.message}`, 'err');
+  }
+};
+
+listProfiles('st:1');
+
+/* streams */
+const streamBoxes = {};
+function buildStreams(names) {
+  if (Object.keys(streamBoxes).length) return;
+  names.forEach((name, i) => {
+    const l = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.onchange = () => {
+      let mask = 0;
+      names.forEach((n, j) => { if (streamBoxes[n].checked) mask |= 1 << j; });
+      queue('streams', mask);
+    };
+    streamBoxes[name] = cb;
+    l.append(cb, ' ', name);
+    $('streams').append(l);
+  });
+}
+
+/* transform controls, generated from the firmware's list */
+const ctrlInputs = {};
+let ctrlDefaults = null;
+function buildCtrls(ctrls) {
+  if (Object.keys(ctrlInputs).length) return;
+  $('ctrls').innerHTML = '';
+  for (const c of ctrls) {
+    const def = c.ty === 'bool' ? { kind: 'bool' }
+      : { kind: 'number', min: c.min ?? undefined, max: c.max ?? undefined, step: c.ty === 'f32' ? 'any' : 1 };
+    if (c.ty === 'f32' && def.min !== undefined && def.max !== undefined) def.step = (def.max - def.min) / 200;
+    const inp = makeInput(def, (v) => queue(c.n, v));
+    const row = makeRow(c.n, inp.el, inp.extra);
+    row.dataset.key = c.n;
+    row.title = [c.nick, c.d].filter(Boolean).join('\n') || c.n;
+    $('ctrls').append(row);
+    ctrlInputs[c.n] = inp;
+  }
+}
+$('ctrl-reset').onclick = () => {
+  if (!ctrlDefaults) return;
+  for (const c of ctrlDefaults) queue(c.n, c.ty === 'bool' ? (c.v ? 1 : 0) : c.v);
+};
+
+function onState(s) {
+  fw = s;
+  buildStreams(s.stream_names);
+  buildCtrls(s.ctrls);
+  ctrlDefaults ??= s.ctrls.map((c) => ({ ...c }));
+  for (const def of SENSOR_FIELDS) {
+    if (def.key in pending || (def.toFw && def.toFw(1)[0] in pending)) continue;
+    sensorInputs[def.key].set(def.fromFw ? def.fromFw(s.sensor) : s.sensor[def.key]);
+  }
+  if (!('streams' in pending)) s.stream_names.forEach((n, i) => { streamBoxes[n].checked = !!(s.streams & (1 << i)); });
+  for (const c of s.ctrls) if (!(c.n in pending)) ctrlInputs[c.n]?.set(c.ty === 'bool' ? (c.v ? 1 : 0) : c.v);
+  document.querySelectorAll('.changed').forEach((r) => { if (!(r.dataset.key in pending)) r.classList.remove('changed'); });
+  $('s-res').textContent = `${s.w}×${s.h}`;
+  updateBandwidth();
+}
+
+function updateBandwidth() {
+  if (!fw) return;
+  const n = fw.stream_names.filter((_, i) => fw.streams & (1 << i)).length;
+  const bytes = 32 + n * (4 + fw.w * fw.h * 4);
+  const baud = port ? currentBaud : +$('baud').value;
+  $('bw').textContent = `1 フレーム ${(bytes / 1024).toFixed(1)} KB → UART 上限 ≈ ${(baud / 10 / bytes).toFixed(1)} fps @ ${baud}`;
+}
+
+/* ------------------------------------------------------------ serial */
+
+let port = null, reader = null, writer = null, currentBaud = 921600;
+let reading = null;
+const enc = new TextEncoder();
+
+async function openPort(baud) {
+  await port.open({ baudRate: baud, bufferSize: 1 << 18 });
+  currentBaud = baud;
+  writer = port.writable.getWriter();
+  reading = readLoop();
+}
+
+async function closePort() {
+  try { await reader?.cancel(); } catch {}
+  await reading?.catch(() => {});
+  try { writer?.releaseLock(); } catch {}
+  try { await port.close(); } catch {}
+  reader = writer = reading = null;
+}
+
+async function readLoop() {
+  reader = port.readable.getReader();
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      parser.feed(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+async function send(line) {
+  if (demo) { log(`> ${line}`, 'tx'); demo.exec(line); return; }
+  if (!writer) { log('未接続', 'err'); return; }
+  log(`> ${line}`, 'tx');
+  await writer.write(enc.encode(line + '\n'));
+}
+
+function setConnected(on) {
+  $('dot').classList.toggle('on', on);
+  $('conn').textContent = on ? `接続中 ${currentBaud}` : '未接続';
+  $('connect').textContent = on ? '切断' : '接続';
+  $('connect').classList.toggle('primary', !on);
+}
+
+$('connect').onclick = async () => {
+  if (port) {
+    try { await send('out ascii'); } catch {}
+    await closePort();
+    port = null;
+    setConnected(false);
+    return;
+  }
+  if (!('serial' in navigator)) { log('この ブラウザは WebSerial 非対応。Chrome / Chromium を使う。', 'err'); return; }
+  try {
+    port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x0483 }] });
+    await openPort(921600);
+    setConnected(true);
+    await send('out bin');
+    await send('get');
+    if (+$('baud').value !== 921600) await switchBaud(+$('baud').value);
+  } catch (e) {
+    log(`接続失敗: ${e.message}`, 'err');
+    if (port) { await closePort(); port = null; }
+    setConnected(false);
+  }
+};
+
+let pongWaiter = null;
+async function switchBaud(baud) {
+  await send(`baud ${baud}`);
+  await new Promise((r) => setTimeout(r, 150));
+  await closePort();
+  await openPort(baud);
+  const ok = await new Promise((resolve) => {
+    pongWaiter = resolve;
+    send('ping');
+    setTimeout(() => resolve(false), 1500);
+  });
+  pongWaiter = null;
+  if (!ok) {
+    log(`${baud} baud で応答なし。921600 に戻す（ファームも 3 秒で戻る）`, 'err');
+    await closePort();
+    await new Promise((r) => setTimeout(r, 3200));
+    await openPort(921600);
+    $('baud').value = '921600';
+    await send('get');
+  }
+  setConnected(true);
+  updateBandwidth();
+}
+$('baud').onchange = () => { if (port) switchBaud(+$('baud').value); else updateBandwidth(); };
+
+/* ------------------------------------------------------------ protocol parser */
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+const MAGIC = [0xA5, 0x5A, 0x56, 0x39];
+const parser = {
+  buf: new Uint8Array(1 << 20), len: 0, line: [],
+  feed(chunk) {
+    if (this.len + chunk.length > this.buf.length) {
+      const nb = new Uint8Array(Math.max(this.buf.length * 2, this.len + chunk.length));
+      nb.set(this.buf.subarray(0, this.len));
+      this.buf = nb;
+    }
+    this.buf.set(chunk, this.len);
+    this.len += chunk.length;
+    let i = 0;
+    while (i < this.len) {
+      const b = this.buf[i];
+      if (b === MAGIC[0]) {
+        if (this.len - i < 8) break;                     // need magic + length
+        if (MAGIC.every((m, k) => this.buf[i + k] === m)) {
+          const n = new DataView(this.buf.buffer, i + 4, 4).getUint32(0, true);
+          if (n > 0 && n < 8 << 20) {
+            if (this.len - i < 8 + n + 4) break;          // wait for the rest
+            const body = this.buf.slice(i + 8, i + 8 + n);
+            const crc = new DataView(this.buf.buffer, i + 8 + n, 4).getUint32(0, true);
+            if (crc32(body) === crc) {
+              this.flushLine();
+              onPacket(body);
+              i += 12 + n;
+              continue;
+            }
+            stats.crc++;
+          }
+        }
+      }
+      if (b === 0x0A) this.flushLine();
+      else if (b !== 0x0D) this.line.push(b);
+      i++;
+    }
+    this.buf.copyWithin(0, i, this.len);
+    this.len -= i;
+  },
+  flushLine() {
+    if (!this.line.length) return;
+    const text = new TextDecoder().decode(new Uint8Array(this.line));
+    this.line = [];
+    onLine(text);
+  },
+};
+
+const stats = { lastFc: null, drop: 0, crc: 0 };
+
+function onLine(text) {
+  if (text.startsWith('$J ')) {
+    let m;
+    try { m = JSON.parse(text.slice(3)); } catch { log(text, 'err'); return; }
+    if (m.t === 'state') { onState(m); log(`state: ${m.w}×${m.h}, bin ${m.sensor.binning}, exp ${m.sensor.exposure} ms`, 'json'); }
+    else if (m.t === 'err') log(`エラー: ${m.msg} (code ${m.code})`, 'err');
+    else if (m.t === 'pong') pongWaiter?.(true);
+    else if (m.t === 'hello') { log(`hello: ${text.slice(3)}`, 'json'); if (writer) { send('out bin'); send('get'); } }
+    else log(text.slice(3), 'json');
+    return;
+  }
+  // ASCII art / ANSI escapes from "out ascii" are noise here
+  log(text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, ''));
+}
+
+/* ------------------------------------------------------------ rendering */
+
+const NAMES = ['depth', 'amplitude', 'ambient', 'confidence', 'reflectance', 'status'];
+let frame = null;     // { w, h, planes: {name: Float32Array|Uint32Array}, ... }
+let view = 'image';
+const cards = {};
+
+function onPacket(body) {
+  const dv = new DataView(body.buffer, body.byteOffset, body.byteLength);
+  const nb = dv.getUint8(1), w = dv.getUint16(2, true), h = dv.getUint16(4, true);
+  const f = {
+    w, h, binning: dv.getUint8(6), temp: dv.getUint16(10, true),
+    fc: dv.getUint32(12, true), fps: dv.getUint32(16, true) / 100, planes: {},
+  };
+  let off = 20;
+  const n = w * h;
+  for (let s = 0; s < nb; s++) {
+    const id = dv.getUint8(off), type = dv.getUint8(off + 1);
+    const bytes = body.slice(off + 4, off + 4 + n * 4).buffer;
+    f.planes[NAMES[id] ?? `s${id}`] = type === 1 ? new Uint32Array(bytes) : new Float32Array(bytes);
+    off += 4 + n * 4;
+  }
+  if (stats.lastFc !== null && f.fc > stats.lastFc + 1) stats.drop += f.fc - stats.lastFc - 1;
+  stats.lastFc = f.fc;
+  $('s-frame').textContent = f.fc;
+  $('s-fps').textContent = f.fps.toFixed(1);
+  $('s-drop').textContent = stats.drop + (stats.crc ? ` / crc ${stats.crc}` : '');
+  $('s-temp').textContent = f.temp;
+  $('s-res').textContent = `${w}×${h}`;
+  $('banner').hidden = true;
+  if ($('pause').checked) return;
+  frame = f;
+  requestAnimationFrame(render);
+}
+
+function cmap(name, t) {
+  t = Math.min(1, Math.max(0, t));
+  if (name === 'gray') { const v = t * 255; return [v, v, v]; }
+  if (name === 'viridis') {
+    const r = 0.2777 + t * (0.1050 + t * (-0.3308 + t * (-4.6342 + t * (6.2283 + t * (4.7764 - 5.4355 * t)))));
+    const g = 0.0054 + t * (1.4046 + t * (0.2148 + t * (-5.7991 + t * (14.1799 + t * (-13.7451 + 4.6459 * t)))));
+    const b = 0.3341 + t * (1.3846 + t * (0.0951 + t * (-19.3324 + t * (56.6906 + t * (-65.3530 + 26.3124 * t)))));
+    return [r * 255, g * 255, b * 255];
+  }
+  // turbo (polynomial fit, Google)
+  const r = 0.13572138 + t * (4.6153926 + t * (-42.66032258 + t * (132.13108234 + t * (-152.94239396 + t * 59.28637943))));
+  const g = 0.09140261 + t * (2.19418839 + t * (4.84296658 + t * (-14.18503333 + t * (4.27729857 + t * 2.82956604))));
+  const b = 0.1066733 + t * (12.64194608 + t * (-60.58204836 + t * (110.36276771 + t * (-89.90310912 + t * 27.34824973))));
+  return [r * 255, g * 255, b * 255];
+}
+
+function valid(name, v) { return Number.isFinite(v) && !(name === 'depth' && v <= 0); }
+
+function makeCard(name) {
+  const def = STREAM_DEFS[name] ?? { cmap: 'gray' };
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.innerHTML = `<div class="head"><b>${name}</b><span class="range"></span>
+    <span><select class="cm"><option>turbo</option><option>viridis</option><option>gray</option></select>
+    <select class="rm"><option value="auto">auto</option><option value="fixed">固定</option></select>
+    <input class="lo" type="number" hidden> <input class="hi" type="number" hidden></span></div>
+    <canvas></canvas><canvas class="bar"></canvas>`;
+  const c = { el, def, canvas: el.querySelector('canvas'), range: el.querySelector('.range'),
+    cm: el.querySelector('.cm'), rm: el.querySelector('.rm'), lo: el.querySelector('.lo'), hi: el.querySelector('.hi'),
+    bar: el.querySelector('.bar') };
+  c.cm.value = def.cmap;
+  if (name === 'depth') { c.lo.value = 0; c.hi.value = 2000; }
+  c.rm.onchange = () => { c.lo.hidden = c.hi.hidden = c.rm.value === 'auto'; };
+  c.canvas.onmousemove = (e) => {
+    if (!frame) return;
+    const r = c.canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / r.width * frame.w), y = Math.floor((e.clientY - r.top) / r.height * frame.h);
+    const i = y * frame.w + x;
+    $('readout').innerHTML = `(${x}, ${y}) ` + Object.entries(frame.planes)
+      .map(([n, p]) => `${n} <b>${fmt(p[i])}</b>${STREAM_DEFS[n]?.unit ?? ''}`).join('  ');
+  };
+  c.canvas.onmouseleave = () => { $('readout').textContent = ''; };
+  cards[name] = c;
+  $('cards').append(el);
+  return c;
+}
+
+function fmt(v) { return Number.isInteger(v) ? v : Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(3); }
+
+function render() {
+  const f = frame;
+  if (!f) return;
+  for (const name of Object.keys(cards)) if (!(name in f.planes)) { cards[name].el.remove(); delete cards[name]; }
+  if (view === 'ascii') return renderAscii(f);
+  for (const [name, p] of Object.entries(f.planes)) {
+    const c = cards[name] ?? makeCard(name);
+    let lo = +c.lo.value, hi = +c.hi.value;
+    if (c.rm.value === 'auto') {
+      lo = Infinity; hi = -Infinity;
+      for (const v of p) if (valid(name, v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+      if (lo === Infinity) { lo = 0; hi = 1; }
+    }
+    c.range.textContent = `${fmt(lo)} – ${fmt(hi)}`;
+    if (c.canvas.width !== f.w || c.canvas.height !== f.h) { c.canvas.width = f.w; c.canvas.height = f.h; }
+    const ctx = c.canvas.getContext('2d');
+    const img = ctx.createImageData(f.w, f.h);
+    const span = hi - lo || 1;
+    for (let i = 0; i < p.length; i++) {
+      const v = p[i];
+      if (!valid(name, v)) { img.data[i * 4 + 3] = 255; continue; }
+      const t = (v - lo) / span;
+      const [r, g, b] = cmap(c.cm.value, name === 'depth' ? 1 - t : t); // near = warm
+      img.data[i * 4] = r; img.data[i * 4 + 1] = g; img.data[i * 4 + 2] = b; img.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    drawBar(c, name === 'depth');
+  }
+}
+
+function drawBar(c, flip) {
+  if (c.bar.dataset.cm === c.cm.value + flip) return;
+  c.bar.dataset.cm = c.cm.value + flip;
+  c.bar.width = 256; c.bar.height = 1;
+  const ctx = c.bar.getContext('2d');
+  const img = ctx.createImageData(256, 1);
+  for (let i = 0; i < 256; i++) {
+    const [r, g, b] = cmap(c.cm.value, flip ? 1 - i / 255 : i / 255);
+    img.data.set([r, g, b, 255], i * 4);
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+const RAMP = '@%#*+=-:. ';
+function renderAscii(f) {
+  const p = f.planes.depth;
+  if (!p) { $('ascii').textContent = 'depth ストリームを有効にする'; return; }
+  let lo = Infinity, hi = -Infinity;
+  for (const v of p) if (valid('depth', v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  const span = hi - lo || 1;
+  let out = '';
+  for (let y = 0; y < f.h; y++) {
+    for (let x = 0; x < f.w; x++) {
+      const v = p[y * f.w + x];
+      out += valid('depth', v) ? RAMP[Math.min(RAMP.length - 1, Math.floor((v - lo) / span * RAMP.length))] : ' ';
+    }
+    out += '\n';
+  }
+  $('ascii').textContent = out + `\n${fmt(lo)} mm (@) – ${fmt(hi)} mm ( )`;
+}
+
+document.querySelectorAll('.tabs button').forEach((b) => {
+  b.onclick = () => {
+    view = b.dataset.view;
+    document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('active', x === b));
+    $('cards').hidden = view !== 'image';
+    $('ascii').hidden = view !== 'ascii';
+    render();
+  };
+});
+
+/* ------------------------------------------------------------ log + console */
+
+function log(text, cls) {
+  const el = $('log');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = text;
+  el.append(line);
+  while (el.childElementCount > 500) el.firstChild.remove();
+  el.scrollTop = el.scrollHeight;
+}
+
+$('cmd-form').onsubmit = (e) => {
+  e.preventDefault();
+  const v = $('cmd').value.trim();
+  if (v) send(v);
+  $('cmd').value = '';
+};
+
+navigator.serial?.addEventListener('disconnect', (e) => {
+  if (e.target === port) { port = null; reader = writer = reading = null; setConnected(false); log('USB 切断', 'err'); }
+});
+
+if (!('serial' in navigator)) log('このブラウザは WebSerial 非対応。Chrome / Chromium で開く。', 'err');
+
+/* ------------------------------------------------------------ demo (index.html#demo): fake firmware, same parser */
+
+const demo = location.hash === '#demo' ? (() => {
+  const RES = { 2: [54, 42], 4: [24, 20], 6: [18, 14], 8: [12, 10], 12: [8, 6], 24: [4, 4] };
+  const st = {
+    sensor: { sync: 1, power: 0, context: 0, period_us: 33333, binning: 2, exposure: 10, dss: 2, dss_index: 0 },
+    streams: 1, out: 'bin',
+    ctrls: [
+      { n: 'demo-bool', nick: 'demo', d: '実機では ST の transform の一覧が出る', ty: 'bool', v: false },
+      { n: 'demo-float', nick: 'demo', d: '', ty: 'f32', v: 1.5, min: 0, max: 5 },
+      { n: 'demo-u32', nick: 'demo', d: '', ty: 'u32', v: 16 },
+    ],
+  };
+  let fc = 0, t0 = performance.now();
+  const line = (o) => parser.feed(enc.encode(`$J ${JSON.stringify(o)}\n`));
+  const state = () => {
+    const [w, h] = RES[st.sensor.binning];
+    line({ t: 'state', ...st, stream_names: NAMES, w, h, baud: 921600 });
+  };
+  function packet() {
+    const [w, h] = RES[st.sensor.binning];
+    const ids = NAMES.map((_, i) => i).filter((i) => st.streams & (1 << i));
+    const n = w * h, body = new Uint8Array(20 + ids.length * (4 + n * 4));
+    const dv = new DataView(body.buffer);
+    const t = (performance.now() - t0) / 1000;
+    dv.setUint8(0, 1); dv.setUint8(1, ids.length); dv.setUint16(2, w, true); dv.setUint16(4, h, true);
+    dv.setUint8(6, st.sensor.binning); dv.setUint16(10, 300, true); dv.setUint32(12, ++fc, true);
+    dv.setUint32(16, 1500, true);
+    let off = 20;
+    for (const id of ids) {
+      dv.setUint8(off, id);
+      const p = new Float32Array(body.buffer, off + 4, n);
+      const cx = w * (0.5 + 0.3 * Math.sin(t)), cy = h * (0.5 + 0.25 * Math.cos(t * 0.7)), r = Math.min(w, h) * 0.3;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const d = Math.hypot(x - cx, y - cy);
+        const depth = d < r ? 400 + d * 600 / r : 1500 + 300 * y / h;   // a ball in front of a sloped wall
+        const v = [depth, 4e5 / depth, 50 + 10 * Math.random(), d < r ? 0.9 : 0.6, d < r ? 0.6 : 0.3, 0][id];
+        p[y * w + x] = Math.random() < 0.01 ? 0 : v + (id === 0 ? (Math.random() - 0.5) * 8 : 0);
+      }
+      off += 4 + n * 4;
+    }
+    const out = new Uint8Array(12 + body.length);
+    out.set(MAGIC); new DataView(out.buffer).setUint32(4, body.length, true);
+    out.set(body, 8); new DataView(out.buffer).setUint32(8 + body.length, crc32(body), true);
+    parser.feed(out);
+  }
+  setTimeout(() => {
+    $('conn').textContent = 'デモ（偽データ）'; $('dot').classList.add('on'); $('connect').disabled = true;
+    line({ t: 'hello', app: 'vl53l9-explorer (demo)', proto: 1 });
+    state();
+    setInterval(() => st.out === 'bin' && packet(), 66);
+  });
+  return {
+    exec(cmd) {
+      const [c, ...args] = cmd.trim().split(/\s+/);
+      if (c === 'get') return state();
+      if (c === 'ping') return line({ t: 'pong' });
+      if (c === 'out') { st.out = args[0]; return state(); }
+      if (c !== 'set') return line({ t: 'err', msg: c, code: -1 });
+      for (const a of args) {
+        const [k, v] = a.split('=');
+        const ctrl = st.ctrls.find((x) => x.n === k);
+        if (ctrl) ctrl.v = ctrl.ty === 'bool' ? v === '1' || v === 'true' : +v;
+        else if (k === 'streams') st.streams = +v || 1;
+        else if (k === 'usecase') Object.assign(st.sensor, [[2, 1, 8], [2, 0, 10], [4, 1, 4], [4, 0, 5]][+v]
+          .reduce((o, x, i) => ({ ...o, [['binning', 'context', 'exposure'][i]]: x }), { sync: 2 }));
+        else if (k in st.sensor) st.sensor[k] = +v;
+        else return line({ t: 'err', msg: k, code: -1 });
+      }
+      if (!RES[st.sensor.binning]) { line({ t: 'err', msg: 'binning', code: -3 }); st.sensor.binning = 2; }
+      state();
+    },
+  };
+})() : null;
+</script>
+</body>
+</html>

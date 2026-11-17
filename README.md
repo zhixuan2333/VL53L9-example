@@ -45,12 +45,30 @@ make monitor              # シリアル (picocom, 終了は C-a C-x)
 | `ranging_i3c` | I3C でデータ取得(まずこれ) |
 | `ranging_csi` | MIPI CSI-2 でデータ取得 |
 | `ranging_multi_i3c` | センサ 2 台以上が必要 |
+| `explorer` | 全パラメータを Web UI から変更（下記, `apps/explorer/`） |
 
 深度フレームを ASCII で表示:
 
 ```sh
 make clean && make EXTRA_DEFS=-DCONF_PRINT_FRAME=1 && make run
 ```
+
+## 4. Explorer (Web UI で全パラメータを試す)
+
+```sh
+make APP=explorer run-probe-rs   # ファームを SRAM にロード（起動時は UART に ASCII 深度マップ）
+make web                         # 別ターミナル: http://localhost:8000 を Chromium で開いて「接続」
+```
+
+- センサー設定（sync / binning / exposure / frame rate / context / DSS / DSS index / power / usecase プリセット）と
+  ST transform の全コントロール（ファームが実行時に一覧を送る）を変更すると、その場でパイプラインを再構築する。
+- Profile: ST の 4 usecase に加え、現在の設定（センサー・ストリーム・transform）を名前を付けて保存/適用できる。
+  保存先はブラウザ (localStorage)。「書き出し」「読み込み」で JSON ファイルとしてやり取りできる。
+- 出力ストリーム（depth / amplitude / ambient / confidence / reflectance / status）を選んでヒートマップ表示、
+  ホバーで画素値、ASCII 表示。921600 baud では depth のみ 54×42 で約 10 fps が上限（2 M 以上は実験的）。
+- picocom で直接使う場合: `out ascii` / `out text` / `get` / `set binning=4 exposure=8` / `status`
+  （プロトコルは `apps/explorer/vl53l9_app.c` 冒頭）。Web UI と picocom は同時にポートを開けない。
+- ハード無しで UI だけ試す: `http://localhost:8000/#demo`
 
 `src/irq_unmask.c` は probe-rs のバグ (#4390: RAM 実行時に割り込みが無効のまま) の回避策。
 

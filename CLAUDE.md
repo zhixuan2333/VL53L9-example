@@ -14,6 +14,14 @@ User-facing steps are in README.md. The user writes Japanese.
 - `openocd/nucleo-n657x0.cfg`: stlink-dap + upstream `target/stm32n6x.cfg` (needs openocd-git; Arch's
   0.12.0 lacks it).
 
+## Explorer (added 2026-11-17, not run on hardware)
+- `apps/explorer/vl53l9_app.c` (our code, `make APP=explorer`; Makefile looks in `apps/<APP>` before the vendor app dir).
+  I3C only. Text commands in via LPUART1 RX interrupt (HAL_UART_RxCpltCallback), out: log lines, `$J {json}` lines,
+  binary packets `A5 5A 'V' '9' | u32 len | body | crc32`. Any `set` = stop sensor + destroy/recreate transform + restart.
+- `web/index.html`: WebSerial UI, no deps; `#demo` fakes the firmware through the same parser. `make web` serves it.
+- Untested on hardware: autonomous sync over I3C, baud switching (ST-LINK V3 VCP rates), transform recreate leaks.
+- Hardware: STEVAL connects by FPC alone (CN6 ↔ J1, opposite-side-contact 22-pin 0.5 mm cable), J2 header unused.
+
 ## Hardware facts (from vendor README)
 - Boot: JP1/BOOT0 1-2, JP2/BOOT1 2-3 = dev boot (RAM). 1-2/1-2 = boot from ext flash (needs signed image).
 - Console: LPUART1 @ 921600 via ST-LINK VCP.
